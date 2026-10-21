@@ -1,6 +1,6 @@
 # CaptainRatax Boot
 
-A custom Plymouth boot splash for **CachyOS**, featuring a personal wallpaper, a centered logo, a green progress bar, and a panel showing recent boot messages.
+A custom Plymouth boot splash for **CachyOS**, featuring a personal wallpaper, a centered logo, a green progress bar, and a panel showing recent boot messages. Version 5 uses separate compact and standard layout profiles for 1080p and 1440p while keeping dynamic viewport refresh.
 
 The theme is intended for systems using **Limine** and has been packaged so that it can coexist with existing Plymouth themes such as `cachyos-mac-style`.
 
@@ -11,8 +11,8 @@ The theme is intended for systems using **Limine** and has been packaged so that
 - Full-screen wallpaper, converted to PNG for Plymouth.
 - Centered personal logo.
 - Green Plymouth progress bar.
-- A display panel for the eight most recent messages received by the theme.
-- Optional systemd service that forwards journal messages to Plymouth while the splash is running.
+- A display panel for the six most recent messages received by the theme.
+- Optional systemd service that forwards short journal messages to Plymouth while the splash is running.
 - A separate theme directory, leaving the existing Plymouth theme untouched.
 
 ## Project structure
@@ -137,12 +137,74 @@ Plymouth's script image loader expects PNG assets, so the original JPEG should n
 
 ## Important limitations
 
-- **Not a complete boot log viewer:** The theme displays up to eight recent messages. The optional forwarder uses `journalctl -b -n 6 -f --no-pager -o short-monotonic`, and therefore starts collecting messages only once its systemd service runs.
+- **Not a complete boot log viewer:** The theme displays up to six recent messages. The optional forwarder uses `journalctl -b -n 8 -f --no-pager -o cat`, and therefore starts collecting messages only once its systemd service runs.
 - **Early boot events are not guaranteed to appear:** Firmware, bootloader, and early kernel/initramfs messages may not be visible in the panel.
 - **A full system freeze can stop the display:** The last visible message is not necessarily the component responsible for a freeze.
 - **The bar is an estimate:** Plymouth's progress callbacks do not guarantee that all boot tasks have completed.
-- **Privacy:** Some journal entries can contain sensitive operational information. Messages are displayed on the physical screen during boot; avoid forwarding logs on untrusted displays. The forwarder sanitizes control characters and truncates lines to 105 characters but does not redact secrets.
+- **Privacy:** Some journal entries can contain sensitive operational information. Messages are displayed on the physical screen during boot; avoid forwarding logs on untrusted displays. The forwarder sanitizes control characters and bounds incoming lines to 84 characters; the theme also truncates them based on their rendered pixel width but does not redact secrets.
 
 ## Publishing on GitHub
 
-The included wallpaper and logo are user-provided assets. Review their publication permissions before committing them to a public repository. No open-source license is assigned automatically to the code or artwork; choose and document licensing terms explicitly if you plan to publish the repository.
+The included wallpaper and logo are user-provided assets. Review their publication permissions before committing them to a public repository. The GitHub repository currently has an MIT license for its code. The supplied logo and wallpaper are personal artwork: explicitly document their separate licensing or usage restrictions before redistributing them.
+
+## Responsive layout
+
+- The logo, progress bar, and log panel are horizontally centered on the active Plymouth screen.
+- Elements use percentages of the screen dimensions, retaining similar proportions at 1920x1080 and 2560x1440.
+- Log entries are measured after text rendering and shortened with an ellipsis if they exceed the panel's inner width.
+- The log forwarder uses `journalctl -o cat` to display meaningful message text without repeated timestamps and process prefixes. The full timestamped journal is still available via `journalctl -b`.
+- If Plymouth's framebuffer changes resolution after the script loads, positions may still vary; test the actual boot on all connected displays.
+
+> This is a static layout preview validated at 1080p and 1440p, not a runtime test of the Plymouth script engine or the two-monitor boot.
+
+## v4: dynamic layout refresh
+
+The Plymouth viewport can change during startup when the graphics driver takes
+control from firmware. Previous releases measured the viewport just once and
+therefore could render boot layouts too far left or too small, even though the
+shutdown layout looked centered.
+
+Version 4 checks the active viewport on each Plymouth refresh callback and
+rebuilds the layout **only if its size or origin changes**. It also:
+
+- Centers all main elements based on the current viewport.
+- Uses a narrower, more opaque log panel to reduce wallpaper overlap.
+- Preserves the last six messages and rerenders them after a resolution change.
+- Limits text by measured pixel width and fills log rows from top to bottom.
+
+**Notes:** Plymouth's handling of multiple displays differs between graphical
+backends. This workaround is not a guarantee of independent per-monitor layout.
+Do not interpret the progress indicator as proof that boot is complete.
+
+For troubleshooting, inspect boot logs after startup with `journalctl -b`.
+
+## v5: 1080p and 1440p layout profiles
+
+Version 5 retains the v4 Plymouth refresh callback and adjusts visual sizes per
+viewport resolution. The compact layout activates when Plymouth reports a
+viewport height of **1120 pixels or less**, covering a native 1080p framebuffer.
+The standard layout is slightly reduced relative to v4 and is intended for 1440p.
+
+- Smaller logo, progress bar, and log panel on 1080p displays.
+- Slightly smaller composition on 1440p displays.
+- Six visible log rows, with font sizes adjusted for each profile.
+- Forwarded journal lines capped at 84 characters; any remaining overflow is
+  shortened using the rendered pixel width inside the theme.
+- All changes are relative to the current Plymouth viewport; the script does
+  not attempt to configure the monitor's native resolution.
+
+If the same system displays unexpectedly large or small geometry during boot,
+inspect the display's effective Plymouth/DRM framebuffer resolution. On multi-
+monitor systems, Plymouth may treat outputs differently during startup.
+
+### Updating an existing installation
+
+```bash
+sudo ./install.sh
+sudo plymouth-set-default-theme captainratax-boot
+sudo systemctl enable captainratax-boot-logs.service
+sudo limine-mkinitcpio
+```
+
+Run these commands from the extracted v5 directory. Do not restart the system
+if `limine-mkinitcpio` reports errors.
