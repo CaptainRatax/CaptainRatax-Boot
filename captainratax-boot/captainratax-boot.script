@@ -1,0 +1,128 @@
+# CaptainRatax Boot - Plymouth script theme
+# Draws an image background, centered logo, green progress bar and a recent-log viewport.
+# Logs arrive from Plymouth display-message callbacks; they are not a raw kernel console.
+
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+
+screen.width = Window.GetWidth();
+screen.height = Window.GetHeight();
+scale = Math.Min(screen.width / 1920.0, screen.height / 1080.0);
+
+# Background: center-crop (cover) to preserve aspect ratio.
+background.image = Image("background.png");
+background.ratio = Math.Max(screen.width / background.image.GetWidth(), screen.height / background.image.GetHeight());
+background.scaled = background.image.Scale(Math.Int(background.image.GetWidth() * background.ratio), Math.Int(background.image.GetHeight() * background.ratio));
+background.sprite = Sprite(background.scaled);
+background.sprite.SetPosition((screen.width - background.scaled.GetWidth()) / 2, (screen.height - background.scaled.GetHeight()) / 2, -1000);
+
+# Centered CaptainRatax logo.
+logo.original = Image("logo.png");
+logo.size = Math.Int(270 * scale);
+logo.image = logo.original.Scale(logo.size, logo.size);
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetPosition((screen.width - logo.size) / 2, screen.height * 0.30 - logo.size / 2, 10);
+
+# Progress bar. This is Plymouth's estimated progress, not a guarantee of boot completion.
+bar.width = Math.Int(Math.Min(600 * scale, screen.width * 0.75));
+bar.height = Math.Int(Math.Max(5, 9 * scale));
+bar.x = (screen.width - bar.width) / 2;
+bar.y = screen.height * 0.47;
+bar.track = Image("progress-track.png").Scale(bar.width, bar.height);
+bar.fill = Image("progress-fill.png").Scale(bar.width, bar.height);
+bar.track_sprite = Sprite(bar.track);
+bar.track_sprite.SetPosition(bar.x, bar.y, 20);
+bar.fill_sprite = Sprite();
+bar.fill_sprite.SetPosition(bar.x, bar.y, 21);
+bar.fill_sprite.SetOpacity(0);
+
+fun boot_progress_callback(duration, progress) {
+    progress = Math.Clamp(progress, 0, 1);
+    width = Math.Int(bar.width * progress);
+    if (width > 0) {
+        bar.fill_sprite.SetImage(bar.fill.Scale(width, bar.height));
+        bar.fill_sprite.SetOpacity(1);
+    } else {
+        bar.fill_sprite.SetOpacity(0);
+    }
+}
+Plymouth.SetBootProgressFunction(boot_progress_callback);
+
+# Log panel, including a static header embedded in logs-panel.png.
+panel.width = Math.Int(Math.Min(1070 * scale, screen.width * 0.91));
+panel.height = Math.Int(340 * scale);
+panel.x = (screen.width - panel.width) / 2;
+panel.y = screen.height * 0.54;
+panel.image = Image("logs-panel.png").Scale(panel.width, panel.height);
+panel.sprite = Sprite(panel.image);
+panel.sprite.SetPosition(panel.x, panel.y, 30);
+
+log.font = "Monospace 14";
+if (screen.height >= 1400) log.font = "Monospace 18";
+if (screen.height >= 2000) log.font = "Monospace 24";
+if (screen.height < 850) log.font = "Monospace 11";
+
+log.count = 8;
+log.lines = [];
+log.sprites = [];
+for (i = 0; i < log.count; i++) {
+    log.lines[i] = Image.Text("", 0.75, 0.84, 0.79, 1, log.font);
+    log.sprites[i] = Sprite();
+    log.sprites[i].SetPosition(panel.x + (26 * scale), panel.y + (67 + i * 31) * scale, 40);
+}
+log.lines[log.count - 1] = Image.Text("Waiting for boot messages...", 0.52, 0.67, 0.58, 1, log.font);
+log.sprites[log.count - 1].SetImage(log.lines[log.count - 1]);
+
+fun add_log_line(message) {
+    for (i = 0; i < log.count - 1; i++) {
+        log.lines[i] = log.lines[i + 1];
+    }
+    log.lines[log.count - 1] = Image.Text(message, 0.78, 0.89, 0.83, 1, log.font);
+    for (i = 0; i < log.count; i++) {
+        log.sprites[i].SetImage(log.lines[i]);
+    }
+}
+Plymouth.SetDisplayMessageFunction(add_log_line);
+# Native boot/status messages may arrive through either callback.
+Plymouth.SetUpdateStatusFunction(add_log_line);
+
+# Password prompts remain visible in case a disk/unlock prompt is needed.
+password.image = Image("password-panel.png");
+password.width = Math.Int(660 * scale);
+password.height = Math.Int(170 * scale);
+password.x = (screen.width - password.width) / 2;
+password.y = screen.height * 0.33;
+password.sprite = Sprite(password.image.Scale(password.width, password.height));
+password.sprite.SetPosition(password.x, password.y, 1000);
+password.sprite.SetOpacity(0);
+password.prompt = Sprite();
+password.prompt.SetPosition(password.x + 30 * scale, password.y + 32 * scale, 1001);
+password.bullets = Sprite();
+password.bullets.SetPosition(password.x + 30 * scale, password.y + 92 * scale, 1001);
+password.prompt.SetOpacity(0);
+password.bullets.SetOpacity(0);
+
+fun display_password_callback(prompt, count) {
+    password.sprite.SetOpacity(1);
+    password.prompt.SetImage(Image.Text(prompt, 1, 1, 1, 1, log.font));
+    password.prompt.SetOpacity(1);
+    marks = "";
+    for (j = 0; j < Math.Min(count, 32); j++) marks += "*";
+    password.bullets.SetImage(Image.Text(marks, 0.28, 0.95, 0.48, 1, log.font));
+    password.bullets.SetOpacity(1);
+}
+fun display_normal_callback() {
+    password.sprite.SetOpacity(0);
+    password.prompt.SetOpacity(0);
+    password.bullets.SetOpacity(0);
+}
+fun display_question_callback(prompt, entry) {
+    password.sprite.SetOpacity(1);
+    password.prompt.SetImage(Image.Text(prompt, 1, 1, 1, 1, log.font));
+    password.prompt.SetOpacity(1);
+    password.bullets.SetImage(Image.Text(entry, 0.28, 0.95, 0.48, 1, log.font));
+    password.bullets.SetOpacity(1);
+}
+Plymouth.SetDisplayPasswordFunction(display_password_callback);
+Plymouth.SetDisplayQuestionFunction(display_question_callback);
+Plymouth.SetDisplayNormalFunction(display_normal_callback);

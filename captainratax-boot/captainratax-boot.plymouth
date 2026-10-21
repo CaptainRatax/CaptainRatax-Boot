@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=CaptainRatax Boot
+Description=Custom CachyOS boot splash with wallpaper, green progress bar and live boot messages
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/captainratax-boot
+ScriptFile=/usr/share/plymouth/themes/captainratax-boot/captainratax-boot.script

@@ -1,0 +1,15 @@
+[Unit]
+Description=Stream boot journal messages to CaptainRatax Plymouth splash
+Documentation=man:plymouth(1) man:journalctl(1)
+After=systemd-journald.service plymouth-start.service
+ConditionKernelCommandLine=splash
+
+[Service]
+Type=simple
+ExecStart=/usr/local/libexec/captainratax-boot-log-forwarder
+Restart=no
+StandardOutput=null
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

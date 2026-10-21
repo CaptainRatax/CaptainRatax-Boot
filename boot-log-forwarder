@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Send recent journal messages to Plymouth's theme. Do not consume or modify journal data.
+set -uo pipefail
+
+command -v plymouth >/dev/null || exit 0
+command -v journalctl >/dev/null || exit 0
+
+# During a graphical desktop session, never spawn/attach to a new Plymouth daemon.
+for _ in {1..12}; do
+    if plymouth --ping >/dev/null 2>&1; then break; fi
+    sleep 0.25
+done
+plymouth --ping >/dev/null 2>&1 || exit 0
+
+# Journal logs can contain terminal escapes, binary controls or many kilobytes.
+# Sanitize and bound line length before sending them to the on-screen viewport.
+journalctl -b -n 6 -f --no-pager -o short-monotonic 2>/dev/null | \
+while IFS= read -r line; do
+    if ! plymouth --ping >/dev/null 2>&1; then
+        break
+    fi
+    # Drop nonprintable control bytes (including ESC) and cap the width.
+    line=$(printf '%s' "$line" | LC_ALL=C tr -cd '\11\40-\176' | cut -c 1-105)
+    [[ -n "$line" ]] || continue
+    plymouth display-message --text="$line" >/dev/null 2>&1 || break
+done
