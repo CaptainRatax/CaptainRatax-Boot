@@ -1,12 +1,15 @@
 # CaptainRatax Boot - Plymouth script theme
-# Dual-profile splash for 1080p and 1440p, with live resolution-change handling.
-# All geometry is recalculated when the Plymouth viewport changes after KMS starts.
+# Version 7: 1440p layout is unchanged; 1080p is a 75% scale of the 1440p master.
+# Refreshes geometry if the active Plymouth viewport changes after KMS starts.
 # Log messages are delivered by Plymouth, not read directly by the theme.
 
 Window.SetBackgroundTopColor(0, 0, 0);
 Window.SetBackgroundBottomColor(0, 0, 0);
 
-background.original = Image("background.png");
+# Load the 1440p master background and its precisely downscaled 1080p copy.
+background.compact = Image("background-1080.png");
+background.standard = Image("background-1440.png");
+background.original = background.compact;
 background.sprite = Sprite();
 background.sprite.SetPosition(0, 0, -1000);
 
@@ -112,41 +115,56 @@ fun update_layout() {
     screen.scale = Math.Min(screen.width / 1920.0, screen.height / 1080.0);
     screen.center_x = screen.origin_x + screen.width / 2;
 
-    # Preserve wallpaper aspect ratio at any framebuffer size.
+    # Both bundled images are 16:9. Native 1080p/1440p outputs have no cropping.
+    # On unusual firmware resolutions, center-cover retains aspect ratio without stretching.
+    if (screen.height <= 1120)
+        background.original = background.compact;
+    else
+        background.original = background.standard;
     background.factor = Math.Max(screen.width / background.original.GetWidth(), screen.height / background.original.GetHeight());
     background.width = Math.Int(background.original.GetWidth() * background.factor);
     background.height = Math.Int(background.original.GetHeight() * background.factor);
     background.sprite.SetImage(background.original.Scale(background.width, background.height));
     background.sprite.SetPosition(screen.origin_x + (screen.width - background.width) / 2, screen.origin_y + (screen.height - background.height) / 2, -1000);
 
-    # The compact profile avoids crowding smaller screens. Use current viewport
-    # dimensions, not the originally detected firmware framebuffer geometry.
+    # The 1440p design is the sole layout reference. On a 1920x1080 viewport,
+    # master_scale equals exactly 0.75. Positions, sizes and spacing are scaled
+    # uniformly instead of using a separate compact profile.
     if (screen.height <= 1120) {
-        logo.size = Math.Int(Math.Min(screen.height * 0.16, screen.width * 0.115));
-        logo.y = Math.Int(screen.origin_y + screen.height * 0.18);
-        bar.width = Math.Int(screen.width * 0.25);
-        bar.height = Math.Int(Math.Max(5, screen.height * 0.006));
-        panel.width = Math.Int(screen.width * 0.42);
-        panel.height = Math.Int(screen.height * 0.22);
-        panel.gap = screen.height * 0.032;
-        log.font = "Monospace 13";
+        master_scale = Math.Min(screen.width / 2560.0, screen.height / 1440.0);
+        master_top = (screen.height - 1440.0 * master_scale) / 2;
+
+        # Use the same integer pixel geometry as the unmodified 1440p branch.
+        logo.size = Math.Int(Math.Int(Math.Min(1440.0 * 0.19, 2560.0 * 0.15)) * master_scale);
+        logo.y = Math.Int(screen.origin_y + master_top + Math.Int(1440.0 * 0.13) * master_scale);
+        bar.width = Math.Int(Math.Int(2560.0 * 0.27) * master_scale);
+        bar.height = Math.Int(Math.Max(1, Math.Int(Math.Max(6, 1440.0 * 0.006)) * master_scale));
+        panel.width = Math.Int(Math.Int(2560.0 * 0.505) * master_scale);
+        panel.height = Math.Int(panel.width * 340.0 / 1070.0);
+        panel.gap = 1440.0 * 0.032 * master_scale;
+        # Plymouth requires an integer font size; 19 * 0.75 = 14.25.
+        log.font = "Monospace 14";
     } else {
-        # Slightly smaller than the v4 layout at 2560x1440.
+        # Standard 1440p: preserve the v5 logo/bar and enlarge the log box.
         logo.size = Math.Int(Math.Min(screen.height * 0.19, screen.width * 0.15));
         logo.y = Math.Int(screen.origin_y + screen.height * 0.13);
         bar.width = Math.Int(screen.width * 0.27);
         bar.height = Math.Int(Math.Max(6, screen.height * 0.006));
-        panel.width = Math.Int(screen.width * 0.49);
-        panel.height = Math.Int(screen.height * 0.235);
+        panel.width = Math.Int(screen.width * 0.505);
+        panel.height = Math.Int(panel.width * 340.0 / 1070.0);
         panel.gap = screen.height * 0.032;
-        log.font = "Monospace 18";
+        log.font = "Monospace 19";
     }
 
-    # Keep the layout usable at smaller unexpected firmware resolutions.
-    logo.size = Math.Int(Math.Max(72, logo.size));
+    # Clamp sizes for unusual screen modes, preserving the panel aspect ratio.
+    logo.size = Math.Int(Math.Max(68, Math.Min(logo.size, screen.height * 0.25)));
     bar.width = Math.Int(Math.Min(bar.width, screen.width * 0.78));
-    panel.width = Math.Int(Math.Min(panel.width, screen.width * 0.88));
-    panel.height = Math.Int(Math.Min(panel.height, screen.height * 0.32));
+    panel.width = Math.Int(Math.Min(panel.width, screen.width * 0.86));
+    panel.height = Math.Int(panel.width * 340.0 / 1070.0);
+    if (panel.height > screen.height * 0.36) {
+        panel.height = Math.Int(screen.height * 0.36);
+        panel.width = Math.Int(panel.height * 1070.0 / 340.0);
+    }
 
     logo.sprite.SetImage(logo.original.Scale(logo.size, logo.size));
     logo.sprite.SetPosition(Math.Int(screen.center_x - logo.size / 2), logo.y, 10);

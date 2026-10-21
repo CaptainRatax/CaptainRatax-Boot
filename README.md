@@ -1,31 +1,40 @@
 # CaptainRatax Boot
 
-A custom Plymouth boot splash for **CachyOS**, featuring a personal wallpaper, a centered logo, a green progress bar, and a panel showing recent boot messages. Version 5 uses separate compact and standard layout profiles for 1080p and 1440p while keeping dynamic viewport refresh.
+**Version 7** of the custom Plymouth splash for CachyOS and Arch Linux. It displays a personalized wallpaper, a centered logo, a green progress bar, and a panel with recent boot messages.
 
-The theme is intended for systems using **Limine** and has been packaged so that it can coexist with existing Plymouth themes such as `cachyos-mac-style`.
+This package is intended for use with **Plymouth + systemd**, including CachyOS installations using **Limine**. It does not replace or modify existing Limine/Snapper snapshots.
 
-> **Testing status:** The files have been prepared and the Bash scripts checked for syntax errors, but the Plymouth theme has **not** been tested on a physical CachyOS boot. Always test carefully and keep an alternative boot entry available.
+## What changed in v7
 
-## Features
+- **The 1440p layout is unchanged** from v6, including the logo, progress bar,
+  log panel size, text size, and spacing.
+- The 1080p layout now uses the **1440p geometry as its master**, scaled
+  uniformly by **0.75** for a native 1920 × 1080 Plymouth viewport.
+- The 1080p panel is therefore larger than in v6, and the entire composition
+  sits at the same relative vertical and horizontal positions as the 1440p version.
+- The 1920 × 1080 wallpaper is now downscaled directly from the unchanged
+  2560 × 1440 wallpaper using aspect-preserving Lanczos resampling.
+- Plymouth window changes still trigger layout updates; log forwarding,
+  installation scripts, systemd unit and 1440p visual assets are unchanged.
 
-- Full-screen wallpaper, converted to PNG for Plymouth.
-- Centered personal logo.
-- Green Plymouth progress bar.
-- A display panel for the six most recent messages received by the theme.
-- Optional systemd service that forwards short journal messages to Plymouth while the splash is running.
-- A separate theme directory, leaving the existing Plymouth theme untouched.
+> **Display behavior:** Plymouth chooses the background and layout using the
+> viewport size *reported by Plymouth*, which may differ from the resolution in
+> your desktop session while drivers are initializing. At native 1080p and
+> 1440p, both layouts use the same 16:9 composition. Other viewport sizes are
+> handled on a best-effort basis.
 
-## Project structure
+## Files
 
 ```text
-captainratax-boot-theme/
+CaptainRatax-Boot-v7/
 ├── README.md
 ├── install.sh
 ├── boot-log-forwarder
 ├── captainratax-boot/
 │   ├── captainratax-boot.plymouth
 │   ├── captainratax-boot.script
-│   ├── background.png
+│   ├── background-1080.png
+│   ├── background-1440.png
 │   ├── logo.png
 │   ├── logs-panel.png
 │   ├── password-panel.png
@@ -37,66 +46,43 @@ captainratax-boot-theme/
 
 ## Requirements
 
-- Linux with Plymouth and systemd installed.
-- The Plymouth **script** module.
-- `journalctl`, for the optional log forwarding service.
-- CachyOS with Limine and `limine-mkinitcpio` if following the bootloader instructions below.
+- Plymouth with the `script` plugin, systemd, and journalctl.
+- On CachyOS with Limine, the `limine-mkinitcpio` command and the `plymouth` mkinitcpio hook.
+- Root permission to install system theme files and regenerate the initramfs.
 
-## Installation
+## Upgrade from v6 (CachyOS + Limine)
 
-Extract the archive, open the project directory, and install its files:
+Extract the archive and enter its top-level directory:
 
 ```bash
+cd ~/Downloads
+tar -xzf CaptainRatax-Boot-v7.tar.gz
+cd CaptainRatax-Boot-v7
 sudo ./install.sh
-```
-
-Check that Plymouth can see the theme:
-
-```bash
-plymouth-set-default-theme -l | grep captainratax-boot
-```
-
-The installer **does not** change the active Plymouth theme, enable the log service, edit your kernel command line, or regenerate your initramfs.
-
-## Enable the theme
-
-Select the new theme (without using `-R`):
-
-```bash
 sudo plymouth-set-default-theme captainratax-boot
-```
-
-Optionally enable live boot messages:
-
-```bash
 sudo systemctl enable captainratax-boot-logs.service
-```
-
-### Limine boot parameters
-
-Edit `/etc/default/limine` and verify that your existing `KERNEL_CMDLINE[default]` includes `splash` and does **not** include `plymouth.enable=0`.
-
-Typically, `quiet` is used to keep the raw kernel messages from appearing over the graphical splash. Preserve all existing storage, root filesystem, and Btrfs parameters.
-
-For example, a **template** for a Btrfs root filesystem looks like this:
-
-```ini
-KERNEL_CMDLINE[default]+="quiet nowatchdog splash rw rootflags=subvol=/@ root=UUID=<YOUR-ROOT-FILESYSTEM-UUID>"
-```
-
-**Do not paste this template verbatim.** Keep the real `root=`, `rootflags=`, and any other required parameters from your working configuration.
-
-Apply the Plymouth and Limine changes:
-
-```bash
 sudo limine-mkinitcpio
 ```
 
-Only reboot after the command completes successfully. Do not edit `/boot/limine.conf` manually just to apply these settings.
+The installer **only copies files** and reloads the systemd unit definitions. It does not enable a service, change the active theme, edit Limine kernel parameters, or rebuild the initramfs by itself. Wait for a successful `limine-mkinitcpio` build before rebooting.
 
-## Restore the previous theme
+Make sure `/etc/default/limine` still enables Plymouth with `splash` and does not contain `plymouth.enable=0`. Preserve all existing root/Btrfs identifiers and kernel options. Do not replace your working kernel command line with a generic example.
 
-To return to the original `cachyos-mac-style` theme:
+## Verify
+
+```bash
+plymouth-set-default-theme
+systemctl is-enabled captainratax-boot-logs.service
+```
+
+To examine full logs after boot:
+
+```bash
+journalctl -b --no-pager
+journalctl -b -u captainratax-boot-logs.service --no-pager
+```
+
+## Roll back to your previous Plymouth theme
 
 ```bash
 sudo systemctl disable --now captainratax-boot-logs.service
@@ -104,107 +90,20 @@ sudo plymouth-set-default-theme cachyos-mac-style
 sudo limine-mkinitcpio
 ```
 
-Ensure the Limine kernel command line still enables Plymouth (`splash` and no `plymouth.enable=0`). Keep your existing Limine/Snapper recovery entries intact.
+If you have a local copy of v6, reinstall that version to restore its previous 1080p layout before regenerating the initramfs. Alternatively, use `cachyos-mac-style` as a known working option.
 
-## Troubleshooting
+## Limitations and privacy
 
-Check the log forwarding service:
+- Plymouth provides estimated boot progress, not a guarantee that startup is complete.
+- The log forwarder only streams journal messages **after its systemd service starts**. This is not a full early-kernel log console; the last visible line does not identify the cause of a freeze.
+- The log panel may also be visible during shutdown; full journal output remains accessible through `journalctl` after boot.
+- Journal messages may contain operational details. Do not use this display on screens visible to untrusted viewers without reviewing the forwarding script.
+- The original wallpaper provided in this conversation was available as a 2048 × 1152 image, and the two assets in this package were resampled from that file. Use the original 3840 × 2160 wallpaper when available if you want to rebuild these files from the highest-quality source.
 
-```bash
-systemctl status captainratax-boot-logs.service
-journalctl -b -u captainratax-boot-logs.service --no-pager
-```
+## GitHub publishing
 
-Review the full boot journal separately:
+The script and README are written in English. Review the usage rights for the personal logo and wallpaper separately from the repository's source-code license before redistributing the assets.
 
-```bash
-journalctl -b --no-pager
-```
+## Testing
 
-If the graphics render but the text is missing, check that Plymouth can render the selected font in your initramfs, that Plymouth's hooks are configured properly, and that your initramfs has been regenerated.
-
-### Restore the original wallpaper resolution
-
-The bundled `background.png` is a PNG conversion of the supplied wallpaper, resized to 2048 x 1152 to reduce the theme size. If the original 3840 x 2160 JPEG is available, you can replace the installed PNG with ImageMagick:
-
-```bash
-sudo magick '/path/to/Wallpaper_background.jpg' -strip \
-  /usr/share/plymouth/themes/captainratax-boot/background.png
-sudo limine-mkinitcpio
-```
-
-Plymouth's script image loader expects PNG assets, so the original JPEG should not be referenced directly by `Image(...)` in the script.
-
-## Important limitations
-
-- **Not a complete boot log viewer:** The theme displays up to six recent messages. The optional forwarder uses `journalctl -b -n 8 -f --no-pager -o cat`, and therefore starts collecting messages only once its systemd service runs.
-- **Early boot events are not guaranteed to appear:** Firmware, bootloader, and early kernel/initramfs messages may not be visible in the panel.
-- **A full system freeze can stop the display:** The last visible message is not necessarily the component responsible for a freeze.
-- **The bar is an estimate:** Plymouth's progress callbacks do not guarantee that all boot tasks have completed.
-- **Privacy:** Some journal entries can contain sensitive operational information. Messages are displayed on the physical screen during boot; avoid forwarding logs on untrusted displays. The forwarder sanitizes control characters and bounds incoming lines to 84 characters; the theme also truncates them based on their rendered pixel width but does not redact secrets.
-
-## Publishing on GitHub
-
-The included wallpaper and logo are user-provided assets. Review their publication permissions before committing them to a public repository. The GitHub repository currently has an MIT license for its code. The supplied logo and wallpaper are personal artwork: explicitly document their separate licensing or usage restrictions before redistributing them.
-
-## Responsive layout
-
-- The logo, progress bar, and log panel are horizontally centered on the active Plymouth screen.
-- Elements use percentages of the screen dimensions, retaining similar proportions at 1920x1080 and 2560x1440.
-- Log entries are measured after text rendering and shortened with an ellipsis if they exceed the panel's inner width.
-- The log forwarder uses `journalctl -o cat` to display meaningful message text without repeated timestamps and process prefixes. The full timestamped journal is still available via `journalctl -b`.
-- If Plymouth's framebuffer changes resolution after the script loads, positions may still vary; test the actual boot on all connected displays.
-
-> This is a static layout preview validated at 1080p and 1440p, not a runtime test of the Plymouth script engine or the two-monitor boot.
-
-## v4: dynamic layout refresh
-
-The Plymouth viewport can change during startup when the graphics driver takes
-control from firmware. Previous releases measured the viewport just once and
-therefore could render boot layouts too far left or too small, even though the
-shutdown layout looked centered.
-
-Version 4 checks the active viewport on each Plymouth refresh callback and
-rebuilds the layout **only if its size or origin changes**. It also:
-
-- Centers all main elements based on the current viewport.
-- Uses a narrower, more opaque log panel to reduce wallpaper overlap.
-- Preserves the last six messages and rerenders them after a resolution change.
-- Limits text by measured pixel width and fills log rows from top to bottom.
-
-**Notes:** Plymouth's handling of multiple displays differs between graphical
-backends. This workaround is not a guarantee of independent per-monitor layout.
-Do not interpret the progress indicator as proof that boot is complete.
-
-For troubleshooting, inspect boot logs after startup with `journalctl -b`.
-
-## v5: 1080p and 1440p layout profiles
-
-Version 5 retains the v4 Plymouth refresh callback and adjusts visual sizes per
-viewport resolution. The compact layout activates when Plymouth reports a
-viewport height of **1120 pixels or less**, covering a native 1080p framebuffer.
-The standard layout is slightly reduced relative to v4 and is intended for 1440p.
-
-- Smaller logo, progress bar, and log panel on 1080p displays.
-- Slightly smaller composition on 1440p displays.
-- Six visible log rows, with font sizes adjusted for each profile.
-- Forwarded journal lines capped at 84 characters; any remaining overflow is
-  shortened using the rendered pixel width inside the theme.
-- All changes are relative to the current Plymouth viewport; the script does
-  not attempt to configure the monitor's native resolution.
-
-If the same system displays unexpectedly large or small geometry during boot,
-inspect the display's effective Plymouth/DRM framebuffer resolution. On multi-
-monitor systems, Plymouth may treat outputs differently during startup.
-
-### Updating an existing installation
-
-```bash
-sudo ./install.sh
-sudo plymouth-set-default-theme captainratax-boot
-sudo systemctl enable captainratax-boot-logs.service
-sudo limine-mkinitcpio
-```
-
-Run these commands from the extracted v5 directory. Do not restart the system
-if `limine-mkinitcpio` reports errors.
+The code structure and installer can be checked offline, and the background dimensions and aspect ratios can be verified exactly. Real output should still be tested on both your 1080p and 1440p monitors during a normal boot and shutdown. This package has not been tested inside your running Plymouth environment.
